@@ -80,8 +80,9 @@ install_build_dependencies_ubuntu() {
   sudo apt install -y \
     build-essential \
     clang \
-    lld \
     cmake \
+    ccache \
+    lld \
     ninja-build \
     meson \
     pkg-config \
