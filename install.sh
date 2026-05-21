@@ -295,6 +295,7 @@ uninstall_wpe() {
   sudo ldconfig
 
   sudo rm -rfv "$PREFIX"
+  sudo rm -rfv "$SRCDIR"
 
   echo "Successfully Uninstalled."
 }
