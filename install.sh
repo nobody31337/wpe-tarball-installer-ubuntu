@@ -30,7 +30,7 @@ while [[ $# -gt 0 ]]; do
     --test)
       TEST=true
       CURDIR=$(dirname "$(readlink -f "$0")")
-      PREFIX="$CURDIR/~tmp$PREFIX"
+      PREFIX="$CURDIR/~tmp/usr"
       SRCDIR="$CURDIR/~tmp/tarballs"
       shift
       ;;
