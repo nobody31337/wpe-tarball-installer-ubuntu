@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PREFIX="/opt/wpe"
-SRCDIR="$HOME/src/wpe-tarballs"
+SRCDIR="$HOME/tmp/wpe-tarballs"
 
 JOBS=$(nproc)
 
