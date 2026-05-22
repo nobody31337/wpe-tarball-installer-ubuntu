@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PREFIX="/opt/wpe"
-SRCDIR="$HOME/tmp/wpe-tarballs"
+SRCDIR="$HOME/.cache/wpe-tarballs"
 
 JOBS=$(nproc)
 
@@ -19,6 +19,7 @@ COG="cog-$COG_VERSION"
 TEST=false
 NO_APT=false
 UNINSTALL=false
+CLEAR_CACHE=false
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -40,6 +41,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --uninstall)
       UNINSTALL=true
+      shift
+      ;;
+    --clear-cache)
+      CLEAR_CACHE=true
       shift
       ;;
     esac
@@ -277,9 +282,16 @@ uninstall_wpe() {
   sudo ldconfig
 
   sudo rm -rfv "$PREFIX"
-  sudo rm -rfv "$SRCDIR"
 
   echo "Successfully Uninstalled."
+}
+
+clear_cache() {
+  echo "Clearing caches in $SRCDIR..."
+
+  sudo rm -rfv "$SRCDIR"
+
+  echo "Complete."
 }
 
 main() {
@@ -296,6 +308,11 @@ main() {
   echo "  wpewebkit:       $WPEWEBKIT_VERSION"
   echo "  cog:             $COG_VERSION"
   echo
+
+  if $CLEAR_CACHE; then
+    clear_cache
+    exit
+  fi
 
   if $UNINSTALL; then
     uninstall_wpe
