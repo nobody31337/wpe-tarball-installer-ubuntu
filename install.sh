@@ -28,7 +28,7 @@ while [[ $# -gt 0 ]]; do
       shift # past argument
       shift # past value
       ;;
-    --test)
+    -t|--test)
       TEST=true
       CURDIR=$(dirname "$(readlink -f "$0")")
       PREFIX="$CURDIR/~tmp/usr"
@@ -39,11 +39,11 @@ while [[ $# -gt 0 ]]; do
       NO_APT=true
       shift
       ;;
-    --uninstall)
+    -u|--uninstall)
       UNINSTALL=true
       shift
       ;;
-    --clear-cache)
+    -cc|--clear-cache)
       CLEAR_CACHE=true
       shift
       ;;
