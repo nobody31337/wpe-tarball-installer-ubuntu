@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ $EUID -ne 0 ]]; then
+    exec sudo bash "$0" "$@"
+fi
+
 WPEWEBKIT_VERSION="2.52.3"
 WPEBACKEND_FDO_VERSION="1.16.1"
 LIBWPE_VERSION="1.16.3"
@@ -15,51 +19,45 @@ JOBS=$(nproc)
 PREFIX="/opt/wpe"
 LDCONF="/etc/ld.so.conf.d/wpe-tarballs.conf"
 
-get_home_path() {
-    if [[ -n "${SUDO_USER:-}" ]]; then
-        getent passwd "$SUDO_USER" | cut -d: -f6
-    else
-        printf '%s\n' "$HOME"
-    fi
-}
+# get_home_path() {
+#     if [[ -n "${SUDO_USER:-}" ]]; then
+#         getent passwd "$SUDO_USER" | cut -d: -f6
+#     else
+#         printf '%s\n' "$HOME"
+#     fi
+# }
 
-SRCDIR="$(get_home_path)/.cache/wpe-tarballs"
+SRCDIR="/var/cache/wpe-tarballs"
 
 CURDIR=$(dirname "$(readlink -f "$0")")
 TMPDIR="$CURDIR/~tmp"
+
+TMP_PREFIX="$TMPDIR/usr"
+TMP_SRCDIR="$TMPDIR/cache"
 
 DELAY=1
 
 TEST=false
 NO_APT=false
-SUDOLOOP=false
 UNINSTALL=false
 CLEAR_TMP=false
 CLEAR_CACHE=false
 
-ARGS=()
-
 while [[ $# -gt 0 ]]; do
-    ARGS+=($1)
     case $1 in
         -j|--jobs)
             JOBS="$2"
-            ARGS+=($2)
             shift # past argument
             shift # past value
             ;;
         -t|--test)
             TEST=true
-            PREFIX="$TMPDIR/usr"
-            SRCDIR="$TMPDIR/.cache"
+            PREFIX="$TMP_PREFIX"
+            SRCDIR="$TMP_SRCDIR"
             shift
             ;;
         --no-apt)
             NO_APT=true
-            shift
-            ;;
-        --sudoloop)
-            SUDOLOOP=true
             shift
             ;;
         -u|--uninstall)
@@ -131,6 +129,7 @@ install_build_dependencies_ubuntu() {
         libegl1-mesa-dev
         libgles2-mesa-dev
         libgl1-mesa-dev
+        libgtk-4-dev
         libepoxy-dev
         libdrm-dev
         libgbm-dev
@@ -219,16 +218,24 @@ extract_clean() {
 }
 
 build_meson_project() {
+    local meson_options=(
+        --prefix="$PREFIX"
+        --libdir=lib
+        --buildtype=release
+    )
+
     local dir="$1"
+
+    if [[ "$#" -gt 1 ]]; then
+        shift
+        meson_options+=($@)
+    fi
 
     cd "$SRCDIR/$dir"
 
     echo "  -> Configuring $dir"
     sleep $DELAY
-    meson setup _build \
-        --prefix="$PREFIX" \
-        --libdir=lib \
-        --buildtype=release
+    meson setup _build "${meson_options[@]}"
 
     echo "  -> Building $dir"
     sleep $DELAY
@@ -241,8 +248,6 @@ build_meson_project() {
 }
 
 build_wpewebkit() {
-    local dir="wpewebkit-$WPEWEBKIT_VERSION"
-
     local cmake_options=(
         -D CMAKE_BUILD_TYPE=Release
         -D CMAKE_INSTALL_LIBDIR=lib
@@ -260,13 +265,15 @@ build_wpewebkit() {
         -D PORT=WPE
     )
 
+    local dir="wpewebkit-$WPEWEBKIT_VERSION"
+
     cd "$SRCDIR/$dir"
 
     echo "  -> Configuring $dir"
     echo "  -> Using clang/clang++ and lld to reduce final-link memory pressure"
     sleep $DELAY
-
-    CC=clang CXX=clang++ cmake -S . -B _build -G Ninja "${cmake_options[@]}"
+    export CC=clang CXX=clang++
+    cmake -S . -B _build -G Ninja "${cmake_options[@]}"
 
     echo "  -> Building $dir (JOBS: $JOBS)"
     sleep $DELAY
@@ -313,10 +320,10 @@ uninstall_wpe() {
     sudo rm -fv /usr/local/bin/cogctl
     sudo rm -fv /usr/local/bin/WPEWebDriver
 
+    sudo rm -rfv "$PREFIX" "$TMP_PREFIX"
+
     sudo rm -fv "$LDCONF"
     sudo ldconfig
-
-    sudo rm -rfv "$PREFIX"
 
     echo "Successfully Uninstalled."
 }
@@ -421,7 +428,7 @@ main() {
     echo "==> Building Cog"
     sleep $DELAY
     extract_clean "$COG.tar.xz" "$COG"
-    build_meson_project "$COG"
+    build_meson_project "$COG" -Dplatforms=wayland,gtk4,headless,drm
     sudo ln -sf "$PREFIX/bin/cog" /usr/local/bin/cog
     sudo ln -sf "$PREFIX/bin/cogctl" /usr/local/bin/cogctl
 
@@ -438,9 +445,5 @@ main() {
     echo "Or:"
     echo "  $PREFIX/lib/wpe-webkit-2.0/MiniBrowser https://wpewebkit.org"
 }
-
-if [[ $SUDOLOOP && $EUID -ne 0 ]]; then
-    exec sudo bash "$0" "${ARGS[@]}"
-fi
 
 main "$@"
