@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PREFIX="/opt/wpe"
-SRCDIR="$HOME/.cache/wpe-tarballs"
-
-JOBS=$(nproc)
-
 WPEWEBKIT_VERSION="2.52.3"
 WPEBACKEND_FDO_VERSION="1.16.1"
 LIBWPE_VERSION="1.16.3"
@@ -16,9 +11,27 @@ WPEBACKEND_FDO="wpebackend-fdo-$WPEBACKEND_FDO_VERSION"
 LIBWPE="libwpe-$LIBWPE_VERSION"
 COG="cog-$COG_VERSION"
 
+PREFIX="/opt/wpe"
+JOBS=$(nproc)
+
+get_home_path() {
+  if [[ -n "${SUDO_USER:-}" ]]; then
+    getent passwd "$SUDO_USER" | cut -d: f6
+  else
+    printf '%s\n' "$HOME"
+  fi
+}
+
+SRCDIR="$(get_home_path)/.cache/wpe-tarballs"
+
+CURDIR=$(dirname "$(readlink -f "$0")")
+TMPDIR="$CURDIR/~tmp"
+
 TEST=false
 NO_APT=false
+SUDOLOOP=false
 UNINSTALL=false
+CLEAR_TMP=false
 CLEAR_CACHE=false
 
 while [[ $# -gt 0 ]]; do
@@ -30,21 +43,32 @@ while [[ $# -gt 0 ]]; do
       ;;
     -t|--test)
       TEST=true
-      CURDIR=$(dirname "$(readlink -f "$0")")
-      PREFIX="$CURDIR/~tmp/usr"
-      SRCDIR="$CURDIR/~tmp/tarballs"
+      PREFIX="$TMPDIR/usr"
+      SRCDIR="$TMPDIR/.cache"
       shift
       ;;
     --no-apt)
       NO_APT=true
       shift
       ;;
+    --sudoloop)
+      SUDOLOOP=true
+      shift
+      ;;
     -u|--uninstall)
       UNINSTALL=true
       shift
       ;;
+    -ct|--clear-tmp)
+      CLEAR_TMP=true
+      shift
+      ;;
     -cc|--clear-cache)
       CLEAR_CACHE=true
+      shift
+      ;;
+    *)
+      # ignore
       shift
       ;;
     esac
@@ -287,35 +311,40 @@ uninstall_wpe() {
 }
 
 clear_cache() {
-  echo "Clearing caches in $SRCDIR..."
+  echo "Deleting files in $SRCDIR..."
 
   sudo rm -rfv "$SRCDIR"
 
   echo "Complete."
 }
 
+clear_tmp() {
+  echo "Deleting files in $TMPDIR..."
+
+  sudo rm -rfv "$TMPDIR"
+
+  echo "Complete."
+}
+
 main() {
-  echo "============================================================"
-  echo " WPEWebKit tarball installer"
-  echo "============================================================"
-  echo "Prefix:      $PREFIX"
-  echo "Source dir:  $SRCDIR"
-  echo "Jobs:        $JOBS"
-  echo
-  echo "Versions:"
-  echo "  libwpe:          $LIBWPE_VERSION"
-  echo "  wpebackend-fdo:  $WPEBACKEND_FDO_VERSION"
-  echo "  wpewebkit:       $WPEWEBKIT_VERSION"
-  echo "  cog:             $COG_VERSION"
-  echo
+  INTERRUPTED=false
+
+  if $CLEAR_TMP; then
+    INTERRUPTED=true
+    clear_tmp
+  fi
 
   if $CLEAR_CACHE; then
+    INTERRUPTED=true
     clear_cache
-    exit
   fi
 
   if $UNINSTALL; then
+    INTERRUPTED=true
     uninstall_wpe
+  fi
+
+  if $INTERRUPTED; then
     exit
   fi
 
@@ -382,4 +411,23 @@ main() {
   echo "  $PREFIX/lib/wpe-webkit-2.0/MiniBrowser https://wpewebkit.org"
 }
 
-main "$@"
+echo "============================================================"
+echo " WPEWebKit tarball installer"
+echo "============================================================"
+echo "Prefix:      $PREFIX"
+echo "Source dir:  $SRCDIR"
+echo "Jobs:        $JOBS"
+echo
+echo "Versions:"
+echo "  libwpe:          $LIBWPE_VERSION"
+echo "  wpebackend-fdo:  $WPEBACKEND_FDO_VERSION"
+echo "  wpewebkit:       $WPEWEBKIT_VERSION"
+echo "  cog:             $COG_VERSION"
+echo
+
+if $SUDOLOOP; then
+  sudo main "$@"
+else
+  main "$@"
+fi
+
