@@ -17,7 +17,7 @@ LDCONF="/etc/ld.so.conf.d/wpe-tarballs.conf"
 
 get_home_path() {
   if [[ -n "${SUDO_USER:-}" ]]; then
-    getent passwd "$SUDO_USER" | cut -d: f6
+    getent passwd "$SUDO_USER" | cut -d: -f6
   else
     printf '%s\n' "$HOME"
   fi
@@ -37,10 +37,14 @@ UNINSTALL=false
 CLEAR_TMP=false
 CLEAR_CACHE=false
 
+ARGS=()
+
 while [[ $# -gt 0 ]]; do
+  ARGS+=($1)
   case $1 in
     -j|--jobs)
       JOBS="$2"
+      ARGS+=($2)
       shift # past argument
       shift # past value
       ;;
@@ -336,6 +340,20 @@ clear_tmp() {
 }
 
 main() {
+  echo "============================================================"
+  echo " WPEWebKit tarball installer"
+  echo "============================================================"
+  echo "Prefix:      $PREFIX"
+  echo "Source dir:  $SRCDIR"
+  echo "Jobs:        $JOBS"
+  echo
+  echo "Versions:"
+  echo "  libwpe:          $LIBWPE_VERSION"
+  echo "  wpebackend-fdo:  $WPEBACKEND_FDO_VERSION"
+  echo "  wpewebkit:       $WPEWEBKIT_VERSION"
+  echo "  cog:             $COG_VERSION"
+  echo
+
   INTERRUPTED=false
 
   if $CLEAR_TMP; then
@@ -420,23 +438,9 @@ main() {
   echo "Or:"
   echo "  $PREFIX/lib/wpe-webkit-2.0/MiniBrowser https://wpewebkit.org"
 }
-
-echo "============================================================"
-echo " WPEWebKit tarball installer"
-echo "============================================================"
-echo "Prefix:      $PREFIX"
-echo "Source dir:  $SRCDIR"
-echo "Jobs:        $JOBS"
-echo
-echo "Versions:"
-echo "  libwpe:          $LIBWPE_VERSION"
-echo "  wpebackend-fdo:  $WPEBACKEND_FDO_VERSION"
-echo "  wpewebkit:       $WPEWEBKIT_VERSION"
-echo "  cog:             $COG_VERSION"
-echo
-
-if $SUDOLOOP; then
-  sudo main "$@"
-else
-  main "$@"
+  
+if [[ $SUDOLOOP && $EUID -ne 0 ]]; then
+  exec sudo bash "$0" "${ARGS[@]}"
 fi
+
+main "$@"
