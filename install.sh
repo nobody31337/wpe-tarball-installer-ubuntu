@@ -69,106 +69,88 @@ install_build_dependencies_ubuntu() {
     echo "Detected OS: ${PRETTY_NAME:-unknown}"
   fi
 
+  local dependencies=(
+    build-essential
+    clang
+    cmake
+    ccache
+    lld
+    ninja-build
+    meson
+    pkg-config
+    python3
+    ruby
+    gperf
+    bison
+    flex
+    git
+    curl
+    ca-certificates
+    xz-utils
+    gi-docgen
+    gobject-introspection
+    libgirepository1.0-dev
+    libglib2.0-dev
+    libegl1-mesa-dev
+    libgles2-mesa-dev
+    libgl1-mesa-dev
+    libepoxy-dev
+    libdrm-dev
+    libgbm-dev
+    libwayland-dev
+    wayland-protocols
+    libxkbcommon-dev
+    libinput-dev
+    libudev-dev
+    libcairo2-dev
+    libsystemd-dev
+    libsoup-3.0-dev
+    libxml2-dev
+    libxslt1-dev
+    libsqlite3-dev
+    libicu-dev
+    libgcrypt20-dev
+    libgpg-error-dev
+    libtasn1-6-dev
+    libseccomp-dev
+    bubblewrap
+    xdg-dbus-proxy
+    libfontconfig-dev
+    libfreetype-dev
+    libharfbuzz-dev
+    libhyphen-dev
+    libjpeg-dev
+    libpng-dev
+    libwebp-dev
+    libavif-dev
+    libjxl-dev
+    libopenjp2-7-dev
+    liblcms2-dev
+    libwoff-dev
+    libwoff1
+    unifdef
+    libatk1.0-dev
+    libatk-bridge2.0-dev
+    libgstreamer1.0-dev
+    libgstreamer-plugins-base1.0-dev
+    gstreamer1.0-plugins-base
+    gstreamer1.0-plugins-good
+    gstreamer1.0-plugins-bad
+    gstreamer1.0-libav
+    shared-mime-info
+    fonts-dejavu-core
+    fonts-liberation
+    fonts-noto-core
+    weston
+  )
+
   sudo apt update -y
 
   # Helps avoid exact-version runtime/-dev mismatches on Ubuntu.
   sudo apt full-upgrade -y
   sudo apt --fix-broken install -y
 
-  echo "==> Installing compiler, linker, and build systems"
-  sleep 1
-  sudo apt install -y \
-    build-essential \
-    clang \
-    cmake \
-    ccache \
-    lld \
-    ninja-build \
-    meson \
-    pkg-config \
-    python3 \
-    ruby \
-    gperf \
-    bison \
-    flex \
-    git \
-    curl \
-    ca-certificates \
-    xz-utils
-
-  echo "==> Installing introspection and documentation tools"
-  sleep 1
-  sudo apt install -y \
-    gi-docgen \
-    gobject-introspection \
-    libgirepository1.0-dev
-
-  echo "==> Installing graphics, Wayland, EGL, DRM, GBM dependencies"
-  sudo apt install -y \
-    libglib2.0-dev \
-    libegl1-mesa-dev \
-    libgles2-mesa-dev \
-    libgl1-mesa-dev \
-    libepoxy-dev \
-    libdrm-dev \
-    libgbm-dev \
-    libwayland-dev \
-    wayland-protocols \
-    libxkbcommon-dev \
-    libinput-dev \
-    libudev-dev \
-    libcairo2-dev \
-    libsystemd-dev
-
-  echo "==> Installing networking, XML, storage, crypto, and sandboxing dependencies"
-  sleep 1
-  sudo apt install -y \
-    libsoup-3.0-dev \
-    libxml2-dev \
-    libxslt1-dev \
-    libsqlite3-dev \
-    libicu-dev \
-    libgcrypt20-dev \
-    libgpg-error-dev \
-    libtasn1-6-dev \
-    libseccomp-dev \
-    bubblewrap \
-    xdg-dbus-proxy
-
-  echo "==> Installing image, font, text, and media dependencies"
-  sleep 1
-  sudo apt install -y \
-    libfontconfig-dev \
-    libfreetype-dev \
-    libharfbuzz-dev \
-    libhyphen-dev \
-    libjpeg-dev \
-    libpng-dev \
-    libwebp-dev \
-    libavif-dev \
-    libjxl-dev \
-    libopenjp2-7-dev \
-    liblcms2-dev \
-    libwoff-dev \
-    libwoff1 \
-    unifdef \
-    libatk1.0-dev \
-    libatk-bridge2.0-dev \
-    libgstreamer1.0-dev \
-    libgstreamer-plugins-base1.0-dev \
-    gstreamer1.0-plugins-base \
-    gstreamer1.0-plugins-good \
-    gstreamer1.0-plugins-bad \
-    gstreamer1.0-libav
-
-  echo "==> Installing runtime support files"
-  sleep 1
-  sudo apt install -y \
-    shared-mime-info \
-    fonts-dejavu-core \
-    fonts-liberation \
-    fonts-noto-core \
-    weston
+  sudo apt install -y "${dependencies[@]}"
 }
 
 download_tarball() {
