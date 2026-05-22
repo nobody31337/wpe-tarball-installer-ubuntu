@@ -11,8 +11,9 @@ WPEBACKEND_FDO="wpebackend-fdo-$WPEBACKEND_FDO_VERSION"
 LIBWPE="libwpe-$LIBWPE_VERSION"
 COG="cog-$COG_VERSION"
 
-PREFIX="/opt/wpe"
 JOBS=$(nproc)
+PREFIX="/opt/wpe"
+LDCONF="/etc/ld.so.conf.d/wpe-tarballs.conf"
 
 get_home_path() {
   if [[ -n "${SUDO_USER:-}" ]]; then
@@ -26,6 +27,8 @@ SRCDIR="$(get_home_path)/.cache/wpe-tarballs"
 
 CURDIR=$(dirname "$(readlink -f "$0")")
 TMPDIR="$CURDIR/~tmp"
+
+DELAY=1
 
 TEST=false
 NO_APT=false
@@ -87,6 +90,7 @@ require_command() {
 
 install_build_dependencies_ubuntu() {
   echo "==> Installing build dependencies"
+  sleep $DELAY
 
   if $NO_APT; then
     echo "NO_APT set to true. Skipping dependency installation..."
@@ -190,9 +194,9 @@ download_tarball() {
   cd "$SRCDIR"
 
   if [[ -f "$file" ]]; then
-    echo "==> Using existing $file"
+    echo "  -> Using existing $file"
   else
-    echo "==> Downloading $file"
+    echo "  -> Downloading $file"
     curl -fLO "$url"
   fi
 }
@@ -203,7 +207,9 @@ extract_clean() {
 
   cd "$SRCDIR"
 
-  echo "==> Extracting $archive"
+  echo "  -> Extracting $archive"
+  sleep $DELAY
+
   rm -rf "$dir"
   tar -xf "$archive"
 }
@@ -213,19 +219,19 @@ build_meson_project() {
 
   cd "$SRCDIR/$dir"
 
-  echo "==> Configuring $dir"
-  sleep 0.5
+  echo "  -> Configuring $dir"
+  sleep $DELAY
   meson setup _build \
     --prefix="$PREFIX" \
     --libdir=lib \
     --buildtype=release
 
-  echo "==> Building $dir"
-  sleep 0.5
+  echo "  -> Building $dir"
+  sleep $DELAY
   meson compile -C _build
 
-  echo "==> Installing $dir"
-  sleep 0.5
+  echo "  -> Installing $dir"
+  sleep $DELAY
   sudo meson install -C _build
   sudo ldconfig
 }
@@ -252,18 +258,18 @@ build_wpewebkit() {
 
   cd "$SRCDIR/$dir"
 
-  echo "==> Configuring $dir"
-  echo "    Using clang/clang++ and lld to reduce final-link memory pressure"
-  sleep 1
+  echo "  -> Configuring $dir"
+  echo "  -> Using clang/clang++ and lld to reduce final-link memory pressure"
+  sleep $DELAY
 
   CC=clang CXX=clang++ cmake -S . -B _build -G Ninja "${cmake_options[@]}"
 
-  echo "==> Building $dir with JOBS=$JOBS"
-  sleep 0.5
+  echo "  -> Building $dir (JOBS: $JOBS)"
+  sleep $DELAY
   cmake --build _build --parallel "$JOBS"
 
-  echo "==> Installing $dir"
-  sleep 0.5
+  echo "  -> Installing $dir"
+  sleep $DELAY
   sudo cmake --install _build
   sudo ldconfig
 }
@@ -296,13 +302,14 @@ verify_installation() {
 }
 
 uninstall_wpe() {
-  echo "Uninstalling WPE..."
+  echo "==> Uninstalling WPE..."
+  sleep $DELAY
 
   sudo rm -fv /usr/local/bin/cog
   sudo rm -fv /usr/local/bin/cogctl
   sudo rm -fv /usr/local/bin/WPEWebDriver
 
-  sudo rm -fv /etc/ld.so.conf.d/wpe.conf
+  sudo rm -fv "$LDCONF"
   sudo ldconfig
 
   sudo rm -rfv "$PREFIX"
@@ -311,7 +318,8 @@ uninstall_wpe() {
 }
 
 clear_cache() {
-  echo "Deleting files in $SRCDIR..."
+  echo "==> Deleting files in $SRCDIR..."
+  sleep $DELAY
 
   sudo rm -rfv "$SRCDIR"
 
@@ -319,7 +327,8 @@ clear_cache() {
 }
 
 clear_tmp() {
-  echo "Deleting files in $TMPDIR..."
+  echo "==> Deleting files in $TMPDIR..."
+  sleep $DELAY
 
   sudo rm -rfv "$TMPDIR"
 
@@ -348,7 +357,7 @@ main() {
     exit
   fi
 
-  echo "$PREFIX/lib" | sudo tee /etc/ld.so.conf.d/wpe.conf >/dev/null 2>&1
+  echo "$PREFIX/lib" | sudo tee "$LDCONF" >/dev/null 2>&1
   sudo ldconfig
 
   install_build_dependencies_ubuntu
@@ -365,6 +374,7 @@ main() {
 
   echo
   echo "==> Retrieving tarballs"
+  sleep $DELAY
   download_tarball "$LIBWPE.tar.xz"
   download_tarball "$WPEBACKEND_FDO.tar.xz"
   download_tarball "$WPEWEBKIT.tar.xz"
@@ -372,26 +382,26 @@ main() {
 
   echo
   echo "==> Building libwpe"
-  sleep 0.5
+  sleep $DELAY
   extract_clean "$LIBWPE.tar.xz" "$LIBWPE"
   build_meson_project "$LIBWPE"
 
   echo
   echo "==> Building WPEBackend-fdo"
-  sleep 0.5
+  sleep $DELAY
   extract_clean "$WPEBACKEND_FDO.tar.xz" "$WPEBACKEND_FDO"
   build_meson_project "$WPEBACKEND_FDO"
 
   echo
   echo "==> Building WPEWebKit"
-  sleep 0.5
+  sleep $DELAY
   extract_clean "$WPEWEBKIT.tar.xz" "$WPEWEBKIT"
   build_wpewebkit
   sudo ln -sf "$PREFIX/bin/WPEWebDriver" /usr/local/bin/WPEWebDriver
 
   echo
   echo "==> Building Cog"
-  sleep 0.5
+  sleep $DELAY
   extract_clean "$COG.tar.xz" "$COG"
   build_meson_project "$COG"
   sudo ln -sf "$PREFIX/bin/cog" /usr/local/bin/cog
@@ -430,4 +440,3 @@ if $SUDOLOOP; then
 else
   main "$@"
 fi
-
