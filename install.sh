@@ -5,7 +5,7 @@ if [[ $EUID -ne 0 ]]; then
     exec sudo bash "$0" "$@"
 fi
 
-WPEWEBKIT_VERSION="2.52.3"
+WPEWEBKIT_VERSION="2.52.4"
 WPEBACKEND_FDO_VERSION="1.16.1"
 LIBWPE_VERSION="1.16.3"
 COG_VERSION="0.18.5"
