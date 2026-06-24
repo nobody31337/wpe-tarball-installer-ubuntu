@@ -60,6 +60,9 @@ done
 # especially if pkg-config on the system does not search /usr/local/lib/pkgconfig by default.
 export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$PREFIX/share/pkgconfig:${PKG_CONFIG_PATH:-}"
 
+# CMake Ninja build status
+export NINJA_STATUS="[%p](%f/%t) "
+
 info() {
     printf '\033[1m%s\033[0m\n' "$*"
 }
