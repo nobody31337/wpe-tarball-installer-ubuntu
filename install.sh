@@ -142,6 +142,7 @@ install_build_deps() {
         libsystemd-dev
         libsoup-3.0-dev
         libxml2-dev
+        libxml2-utils
         libxslt1-dev
         libsqlite3-dev
         libicu-dev
