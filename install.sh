@@ -331,7 +331,7 @@ main() {
  WPEWebKit tarball installer
 ============================================================
 Prefix:      $PREFIX
-Source dir:  $CACHE_DIR
+Cache dir:   $CACHE_DIR
 Jobs:        $JOBS
 
 Versions:
