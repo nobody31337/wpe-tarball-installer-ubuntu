@@ -16,95 +16,92 @@ LIBWPE="libwpe-$LIBWPE_VERSION"
 COG="cog-$COG_VERSION"
 
 JOBS=$(nproc)
-PREFIX="/opt/wpe"
+PREFIX="/opt/wpe-tarballs"
 LDCONF="/etc/ld.so.conf.d/wpe-tarballs.conf"
 
-# get_home_path() {
-#     if [[ -n "${SUDO_USER:-}" ]]; then
-#         getent passwd "$SUDO_USER" | cut -d: -f6
-#     else
-#         printf '%s\n' "$HOME"
-#     fi
-# }
+CACHE_DIR="/var/cache/wpe-tarballs"
 
-SRCDIR="/var/cache/wpe-tarballs"
-
-CURDIR=$(dirname "$(readlink -f "$0")")
-TMPDIR="$CURDIR/~tmp"
-
-TMP_PREFIX="$TMPDIR/usr"
-TMP_SRCDIR="$TMPDIR/cache"
-
-DELAY=1
-
-TEST=false
-NO_APT=false
+DEPS_ONLY=false
+SKIP_DEPS=false
 UNINSTALL=false
-CLEAR_TMP=false
 CLEAR_CACHE=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -j|--jobs)
-            JOBS="$2"
-            shift # past argument
-            shift # past value
-            ;;
-        -t|--test)
-            TEST=true
-            PREFIX="$TMP_PREFIX"
-            SRCDIR="$TMP_SRCDIR"
-            shift
-            ;;
-        --no-apt)
-            NO_APT=true
-            shift
-            ;;
-        -u|--uninstall)
-            UNINSTALL=true
-            shift
-            ;;
-        -ct|--clear-tmp)
-            CLEAR_TMP=true
-            shift
-            ;;
-        -cc|--clear-cache)
-            CLEAR_CACHE=true
-            shift
-            ;;
-        *)
-            # ignore
-            shift
-            ;;
-        esac
+    -j | --jobs)
+        JOBS="$2"
+        shift # past argument
+        shift # past value
+        ;;
+    --deps-only)
+        DEPS_ONLY=true
+        shift
+        ;;
+    --skip-deps)
+        SKIP_DEPS=true
+        shift
+        ;;
+    -u | --uninstall)
+        UNINSTALL=true
+        shift
+        ;;
+    -cc | --clear-cache)
+        CLEAR_CACHE=true
+        shift
+        ;;
+    *)
+        # ignore
+        shift
+        ;;
+    esac
 done
 
 # Helpful during the staged build
 # especially if pkg-config on the system does not search /usr/local/lib/pkgconfig by default.
 export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$PREFIX/share/pkgconfig:${PKG_CONFIG_PATH:-}"
 
-require_command() {
-    if ! command -v "$1" >/dev/null 2>&1; then
-        echo "Missing required command: $1" >&2
-        exit 1
-    fi
+info() {
+    printf '\033[1m%s\033[0m\n' "$*"
 }
 
-install_build_dependencies_ubuntu() {
-    echo "==> Installing build dependencies"
-    sleep $DELAY
+noti() {
+    printf '\033[1;34m::\033[1;37m %s\033[0m\n' "$*" >&2
+    sleep 1
+}
 
-    if $NO_APT; then
-        echo "NO_APT set to true. Skipping dependency installation..."
+step() {
+    printf '\033[1;32m==>\033[1;37m %s\033[0m\n' "$*" >&2
+    sleep .5
+}
+
+warn() {
+    printf '\033[1;33m==> WARNING:\033[1;37m %s\033[0m\n' "$*" >&2
+    sleep .5
+}
+
+die() {
+    printf '\033[1;31m==> ERROR: \033[1;37m%s\033[0m\n' "$*" >&2
+    exit 1
+}
+
+need() {
+    command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
+}
+
+install_build_deps() {
+    noti "Installing build dependencies"
+
+    if $SKIP_DEPS; then
+        step "SKIP_DEPS set to true. Skipping dependency installation..."
         return
     fi
 
     if [[ -r /etc/os-release ]]; then
         . /etc/os-release
-        echo "Detected OS: ${PRETTY_NAME:-unknown}"
+        step "Detected OS: ${PRETTY_NAME:-unknown}"
     fi
 
-    local dependencies=(
+    local deps=(
         build-essential
         clang
         cmake
@@ -186,20 +183,20 @@ install_build_dependencies_ubuntu() {
     sudo apt full-upgrade -y
     sudo apt --fix-broken install -y
 
-    sudo apt install -y "${dependencies[@]}"
+    sudo apt install -y "${deps[@]}"
 }
 
 download_tarball() {
     local file="$1"
     local url="https://wpewebkit.org/releases/$file"
 
-    mkdir -p "$SRCDIR"
-    cd "$SRCDIR"
+    mkdir -p "$CACHE_DIR"
+    cd "$CACHE_DIR"
 
     if [[ -f "$file" ]]; then
-        echo "  -> Using existing $file"
+        step "Using existing $file"
     else
-        echo "  -> Downloading $file"
+        step "Downloading $file"
         curl -fLO "$url"
     fi
 }
@@ -208,10 +205,9 @@ extract_clean() {
     local archive="$1"
     local dir="$2"
 
-    cd "$SRCDIR"
+    cd "$CACHE_DIR"
 
-    echo "  -> Extracting $archive"
-    sleep $DELAY
+    step "Extracting $archive"
 
     rm -rf "$dir"
     tar -xf "$archive"
@@ -228,21 +224,18 @@ build_meson_project() {
 
     if [[ "$#" -gt 1 ]]; then
         shift
-        meson_options+=($@)
+        meson_options+=("$@")
     fi
 
-    cd "$SRCDIR/$dir"
+    cd "$CACHE_DIR/$dir"
 
-    echo "  -> Configuring $dir"
-    sleep $DELAY
+    step "Configuring $dir"
     meson setup _build "${meson_options[@]}"
 
-    echo "  -> Building $dir"
-    sleep $DELAY
+    step "Building $dir"
     meson compile -C _build
 
-    echo "  -> Installing $dir"
-    sleep $DELAY
+    step "Installing $dir"
     sudo meson install -C _build
     sudo ldconfig
 }
@@ -267,183 +260,162 @@ build_wpewebkit() {
 
     local dir="wpewebkit-$WPEWEBKIT_VERSION"
 
-    cd "$SRCDIR/$dir"
+    cd "$CACHE_DIR/$dir"
 
-    echo "  -> Configuring $dir"
-    echo "  -> Using clang/clang++ and lld to reduce final-link memory pressure"
-    sleep $DELAY
-    export CC=clang CXX=clang++
-    cmake -S . -B _build -G Ninja "${cmake_options[@]}"
+    step "Configuring $dir"
+    step "Using clang/clang++ and lld to reduce final-link memory pressure"
+    CC=clang CXX=clang++ cmake -S . -B _build -G Ninja "${cmake_options[@]}"
 
-    echo "  -> Building $dir (JOBS: $JOBS)"
-    sleep $DELAY
+    step "Building $dir (JOBS: $JOBS)"
     cmake --build _build --parallel "$JOBS"
 
-    echo "  -> Installing $dir"
-    sleep $DELAY
+    step "Installing $dir"
     sudo cmake --install _build
     sudo ldconfig
 }
 
 verify_installation() {
     echo
-    echo "==> Verifying installation"
+    noti "Verifying installation"
 
     echo
-    echo "Commands:"
+    info "Commands:"
     command -v cog || true
     command -v cogctl || true
     command -v WPEWebDriver || true
 
     echo
-    echo "pkg-config versions:"
+    info "pkg-config versions:"
     pkg-config --modversion wpe-1.0
     pkg-config --modversion wpebackend-fdo-1.0
     pkg-config --modversion wpe-webkit-2.0
 
     echo
-    echo "Dynamic linker cache:"
+    info "Dynamic linker cache:"
     ldconfig -p | grep -Ei 'wpe|webkit' || true
 
     echo
-    echo "Installed WPE-related files under $PREFIX:"
+    info "Installed WPE-related files under $PREFIX:"
     find "$PREFIX" \
         \( -path "$PREFIX/bin/*" -o -path "$PREFIX/lib/wpe-webkit-2.0/*" -o -path "$PREFIX/lib/pkgconfig/*wpe*" \) \
         -print 2>/dev/null | sort || true
 }
 
 uninstall_wpe() {
-    echo "==> Uninstalling WPE..."
-    sleep $DELAY
+    noti "Uninstalling WPE..."
 
     sudo rm -fv /usr/local/bin/cog
     sudo rm -fv /usr/local/bin/cogctl
     sudo rm -fv /usr/local/bin/WPEWebDriver
 
-    sudo rm -rfv "$PREFIX" "$TMP_PREFIX"
+    sudo rm -rfv "$PREFIX"
 
     sudo rm -fv "$LDCONF"
     sudo ldconfig
 
-    echo "Successfully Uninstalled."
+    noti "Successfully Uninstalled."
 }
 
 clear_cache() {
-    echo "==> Deleting files in $SRCDIR..."
-    sleep $DELAY
+    noti "Deleting files in $CACHE_DIR..."
 
-    sudo rm -rfv "$SRCDIR"
+    sudo rm -rfv "$CACHE_DIR"
 
-    echo "Complete."
-}
-
-clear_tmp() {
-    echo "==> Deleting files in $TMPDIR..."
-    sleep $DELAY
-
-    sudo rm -rfv "$TMPDIR"
-
-    echo "Complete."
+    noti "Complete."
 }
 
 main() {
-    echo "============================================================"
-    echo " WPEWebKit tarball installer"
-    echo "============================================================"
-    echo "Prefix:      $PREFIX"
-    echo "Source dir:  $SRCDIR"
-    echo "Jobs:        $JOBS"
-    echo
-    echo "Versions:"
-    echo "  libwpe:          $LIBWPE_VERSION"
-    echo "  wpebackend-fdo:  $WPEBACKEND_FDO_VERSION"
-    echo "  wpewebkit:       $WPEWEBKIT_VERSION"
-    echo "  cog:             $COG_VERSION"
-    echo
+    echo -e '\033[0;32m'
+    cat <<EOF
+============================================================
+ WPEWebKit tarball installer
+============================================================
+Prefix:      $PREFIX
+Source dir:  $CACHE_DIR
+Jobs:        $JOBS
 
-    INTERRUPTED=false
-
-    if $CLEAR_TMP; then
-        INTERRUPTED=true
-        clear_tmp
-    fi
+Versions:
+  libwpe:          $LIBWPE_VERSION
+  wpebackend-fdo:  $WPEBACKEND_FDO_VERSION
+  wpewebkit:       $WPEWEBKIT_VERSION
+  cog:             $COG_VERSION
+EOF
+    echo -e '\033[0m'
 
     if $CLEAR_CACHE; then
-        INTERRUPTED=true
         clear_cache
-    fi
-
-    if $UNINSTALL; then
-        INTERRUPTED=true
-        uninstall_wpe
-    fi
-
-    if $INTERRUPTED; then
         exit
     fi
 
-    echo "$PREFIX/lib" | sudo tee "$LDCONF" >/dev/null 2>&1
-    sudo ldconfig
+    if $UNINSTALL; then
+        uninstall_wpe
+        exit
+    fi
 
-    install_build_dependencies_ubuntu
+    install_build_deps
 
-    require_command curl
-    require_command tar
-    require_command meson
-    require_command cmake
-    require_command ninja
-    require_command clang
-    require_command clang++
-    require_command ld.lld
-    require_command pkg-config
+    if $DEPS_ONLY; then
+        exit
+    fi
+
+    need curl
+    need tar
+    need meson
+    need cmake
+    need ninja
+    need clang
+    need clang++
+    need ld.lld
+    need pkg-config
 
     echo
-    echo "==> Retrieving tarballs"
-    sleep $DELAY
+    noti "Retrieving tarballs"
     download_tarball "$LIBWPE.tar.xz"
     download_tarball "$WPEBACKEND_FDO.tar.xz"
     download_tarball "$WPEWEBKIT.tar.xz"
     download_tarball "$COG.tar.xz"
 
     echo
-    echo "==> Building libwpe"
-    sleep $DELAY
+    noti "Building libwpe"
     extract_clean "$LIBWPE.tar.xz" "$LIBWPE"
     build_meson_project "$LIBWPE"
 
     echo
-    echo "==> Building WPEBackend-fdo"
-    sleep $DELAY
+    noti "Building WPEBackend-fdo"
     extract_clean "$WPEBACKEND_FDO.tar.xz" "$WPEBACKEND_FDO"
     build_meson_project "$WPEBACKEND_FDO"
 
     echo
-    echo "==> Building WPEWebKit"
-    sleep $DELAY
+    noti "Building WPEWebKit"
     extract_clean "$WPEWEBKIT.tar.xz" "$WPEWEBKIT"
     build_wpewebkit
     sudo ln -sf "$PREFIX/bin/WPEWebDriver" /usr/local/bin/WPEWebDriver
 
     echo
-    echo "==> Building Cog"
-    sleep $DELAY
+    noti "Building Cog"
     extract_clean "$COG.tar.xz" "$COG"
     build_meson_project "$COG" -Dplatforms=wayland,gtk4,headless,drm
     sudo ln -sf "$PREFIX/bin/cog" /usr/local/bin/cog
     sudo ln -sf "$PREFIX/bin/cogctl" /usr/local/bin/cogctl
 
+    echo "$PREFIX/lib" | sudo tee "$LDCONF" >/dev/null 2>&1
+    sudo ldconfig
+
     verify_installation
 
-    echo
-    echo "============================================================"
-    echo " Installation complete"
-    echo "============================================================"
-    echo
-    echo "Try:"
-    echo "  cog https://wpewebkit.org"
-    echo
-    echo "Or:"
-    echo "  $PREFIX/lib/wpe-webkit-2.0/MiniBrowser https://wpewebkit.org"
+    echo -e '\033[0;32m'
+    cat <<EOF
+============================================================
+ Installation complete
+============================================================
+
+Try:
+  cog https://wpewebkit.org
+
+Or:
+  $PREFIX/lib/wpe-webkit-2.0/MiniBrowser https://wpewebkit.org
+EOF
+    echo -e '\033[0m'
 }
 
 main "$@"
