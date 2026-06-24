@@ -82,8 +82,17 @@ warn() {
     sleep .5
 }
 
+ask_yn() {
+    read -p $'\033[1;34m::\033[1;37m '"$*"$' [Y/n]:\033[0m ' yesno
+    echo
+    case $yesno in
+    [Nn]*) return 1 ;;
+    [Yy]* | *) return 0 ;;
+    esac
+}
+
 die() {
-    printf '\033[1;31m==> ERROR: \033[1;37m%s\033[0m\n' "$*" >&2
+    printf '\033[1;31m==> ERROR: \033[1;37m%s\033[0m\n\n' "$*" >&2
     exit 1
 }
 
@@ -94,14 +103,14 @@ need() {
 install_build_deps() {
     noti "Installing build dependencies"
 
-    if $SKIP_DEPS; then
-        step "SKIP_DEPS set to true. Skipping dependency installation..."
-        return
-    fi
-
     if [[ -r /etc/os-release ]]; then
         . /etc/os-release
         step "Detected OS: ${PRETTY_NAME:-unknown}"
+    fi
+
+    if $SKIP_DEPS; then
+        step "SKIP_DEPS set to true. Skipping dependency installation..."
+        return
     fi
 
     local deps=(
@@ -236,9 +245,11 @@ build_meson_project() {
     step "Configuring $dir"
     meson setup _build "${meson_options[@]}"
 
+    echo
     step "Building $dir"
     meson compile -C _build
 
+    echo
     step "Installing $dir"
     sudo meson install -C _build
     sudo ldconfig
@@ -255,7 +266,7 @@ build_wpewebkit() {
         -D CMAKE_MODULE_LINKER_FLAGS="-fuse-ld=lld"
         -D ENABLE_MINIBROWSER=ON
         -D ENABLE_WPE_PLATFORM=ON
-        -D ENABLE_DOCUMENTATION=ON
+        -D ENABLE_DOCUMENTATION=OFF
         -D ENABLE_SPEECH_SYNTHESIS=OFF
         -D USE_FLITE=OFF
         -D USE_LIBBACKTRACE=OFF
@@ -270,16 +281,17 @@ build_wpewebkit() {
     step "Using clang/clang++ and lld to reduce final-link memory pressure"
     CC=clang CXX=clang++ cmake -S . -B _build -G Ninja "${cmake_options[@]}"
 
+    echo
     step "Building $dir (JOBS: $JOBS)"
     cmake --build _build --parallel "$JOBS"
 
+    echo
     step "Installing $dir"
     sudo cmake --install _build
     sudo ldconfig
 }
 
 verify_installation() {
-    echo
     noti "Verifying installation"
 
     echo
@@ -300,12 +312,16 @@ verify_installation() {
 
     echo
     info "Installed WPE-related files under $PREFIX:"
-    find "$PREFIX" \
-        \( -path "$PREFIX/bin/*" -o -path "$PREFIX/lib/wpe-webkit-2.0/*" -o -path "$PREFIX/lib/pkgconfig/*wpe*" \) \
+    find "$PREFIX" -path "$PREFIX/share/doc" -prune -o \
+        -type f \
+        \( -path "$PREFIX/bin/*" -o -ipath "$PREFIX/lib/*" -o -path "$PREFIX/share/*" \) \
         -print 2>/dev/null | sort || true
 }
 
 uninstall_wpe() {
+    echo
+    ask_yn "Continue uninstalling WPEWebKit?" || return 1
+
     noti "Uninstalling WPE..."
 
     sudo rm -fv /usr/local/bin/cog
@@ -317,15 +333,19 @@ uninstall_wpe() {
     sudo rm -fv "$LDCONF"
     sudo ldconfig
 
+    echo
     noti "Successfully Uninstalled."
+    echo
 }
 
 clear_cache() {
+    echo
+    ask_yn "Do you wish to delete ALL files from cache($CACHE_DIR)?" || return 1
+
     noti "Deleting files in $CACHE_DIR..."
 
     sudo rm -rfv "$CACHE_DIR"
-
-    noti "Complete."
+    echo
 }
 
 main() {
@@ -347,12 +367,13 @@ EOF
     echo -e '\033[0m'
 
     if $CLEAR_CACHE; then
-        clear_cache
+        clear_cache || die "Aborted."
         exit
     fi
 
     if $UNINSTALL; then
-        uninstall_wpe
+        uninstall_wpe || die "Aborted."
+        clear_cache || true
         exit
     fi
 
@@ -404,6 +425,10 @@ EOF
 
     echo "$PREFIX/lib" | sudo tee "$LDCONF" >/dev/null 2>&1
     sudo ldconfig
+
+    cd / # To work around the "sh: 0: getcwd() failed: No such file or directory" error after clearing the cache
+
+    clear_cache || true
 
     verify_installation
 
